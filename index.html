@@ -404,7 +404,7 @@
     </main>
 
     <footer>
-      Data sources: PubMed via NCBI E-utilities and ClinicalTrials.gov API v2. The default search excludes standalone SIRT/sirtuin terms to reduce false positives. Results are loaded by page to improve performance on mobile devices. Classification, device tagging, country inference, and summaries are rule-based and should be manually verified before external or promotional use. Country is inferred from available affiliation or trial location data and may require manual confirmation.
+      Data sources: PubMed via NCBI E-utilities and ClinicalTrials.gov API v2. The default search excludes standalone SIRT/sirtuin terms to reduce false positives. Results are loaded by page to improve performance on mobile devices. Classification, device tagging, country inference, and summaries are rule-based and should be manually verified before external or promotional use. For PubMed, country is inferred from the author affiliation address tail when available; for ClinicalTrials.gov, country uses trial location data. Manual confirmation is still recommended for multi-center or multi-affiliation publications.
     </footer>
   </div>
 
@@ -425,8 +425,40 @@
       { label: "Resin", keywords: ["resin microsphere", "resin microspheres", "sir-spheres", "sirspheres", "resin y90", "resin y-90"] }
     ];
 
-    const COUNTRY_HINTS = [
-      "United States", "USA", "Canada", "United Kingdom", "UK", "France", "Germany", "Italy", "Spain", "Netherlands", "Belgium", "Switzerland", "Austria", "Sweden", "Denmark", "Norway", "Finland", "Poland", "Turkey", "Israel", "China", "Taiwan", "Japan", "Korea", "South Korea", "Singapore", "Thailand", "Malaysia", "India", "Australia", "New Zealand", "Brazil", "Argentina", "Mexico", "Egypt", "Saudi Arabia"
+    const COUNTRY_ALIASES = [
+      { country: "United States", aliases: ["United States", "USA", "U.S.A.", "US", "U.S."] },
+      { country: "United Kingdom", aliases: ["United Kingdom", "UK", "U.K.", "England", "Scotland", "Wales", "Northern Ireland"] },
+      { country: "South Korea", aliases: ["South Korea", "Republic of Korea", "Korea"] },
+      { country: "China", aliases: ["China", "People's Republic of China", "PR China", "P.R. China"] },
+      { country: "Taiwan", aliases: ["Taiwan"] },
+      { country: "Japan", aliases: ["Japan"] },
+      { country: "Singapore", aliases: ["Singapore"] },
+      { country: "Thailand", aliases: ["Thailand"] },
+      { country: "Malaysia", aliases: ["Malaysia"] },
+      { country: "India", aliases: ["India"] },
+      { country: "Australia", aliases: ["Australia"] },
+      { country: "New Zealand", aliases: ["New Zealand"] },
+      { country: "Canada", aliases: ["Canada"] },
+      { country: "France", aliases: ["France"] },
+      { country: "Germany", aliases: ["Germany"] },
+      { country: "Italy", aliases: ["Italy"] },
+      { country: "Spain", aliases: ["Spain"] },
+      { country: "Netherlands", aliases: ["Netherlands", "The Netherlands"] },
+      { country: "Belgium", aliases: ["Belgium"] },
+      { country: "Switzerland", aliases: ["Switzerland"] },
+      { country: "Austria", aliases: ["Austria"] },
+      { country: "Sweden", aliases: ["Sweden"] },
+      { country: "Denmark", aliases: ["Denmark"] },
+      { country: "Norway", aliases: ["Norway"] },
+      { country: "Finland", aliases: ["Finland"] },
+      { country: "Poland", aliases: ["Poland"] },
+      { country: "Turkey", aliases: ["Turkey", "Türkiye"] },
+      { country: "Israel", aliases: ["Israel"] },
+      { country: "Brazil", aliases: ["Brazil"] },
+      { country: "Argentina", aliases: ["Argentina"] },
+      { country: "Mexico", aliases: ["Mexico"] },
+      { country: "Egypt", aliases: ["Egypt"] },
+      { country: "Saudi Arabia", aliases: ["Saudi Arabia"] }
     ];
 
     let papers = [];
@@ -462,13 +494,68 @@
       return matches[0] || "Not specified";
     }
 
+    function escapeRegExp(str = "") {
+      return String(str).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    }
+
+    function normalizeCountry(raw = "") {
+      const cleaned = String(raw)
+        .replace(/\.$/, "")
+        .replace(/\s+/g, " ")
+        .trim();
+
+      for (const item of COUNTRY_ALIASES) {
+        for (const alias of item.aliases) {
+          const pattern = new RegExp(`(^|[^A-Za-z])${escapeRegExp(alias)}([^A-Za-z]|$)`, "i");
+          if (pattern.test(cleaned)) return item.country;
+        }
+      }
+      return "";
+    }
+
+    function stripEmailAndPostalNoise(text = "") {
+      return String(text)
+        .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/ig, "")
+        .replace(/\b\d{4,8}\b/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+    }
+
+    function inferCountryFromAffiliations(affiliations = []) {
+      // PubMed affiliations usually end with city / postal code / country.
+      // Prioritize the tail of each affiliation instead of scanning the whole string.
+      const counts = {};
+      affiliations.forEach(aff => {
+        const clean = stripEmailAndPostalNoise(aff);
+        const parts = clean.split(",").map(x => x.trim()).filter(Boolean);
+
+        const candidates = [
+          parts.slice(-1)[0],
+          parts.slice(-2).join(", "),
+          parts.slice(-3).join(", "),
+          clean.slice(-120)
+        ].filter(Boolean);
+
+        for (const candidate of candidates) {
+          const country = normalizeCountry(candidate);
+          if (country) {
+            counts[country] = (counts[country] || 0) + 1;
+            break;
+          }
+        }
+      });
+
+      const ranked = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+      return ranked.length ? ranked[0][0] : "";
+    }
+
     function inferCountry(affiliations = [], text = "") {
-      const joined = `${affiliations.join(" ")} ${text}`;
-      const found = COUNTRY_HINTS.find(c => joined.toLowerCase().includes(c.toLowerCase()));
-      if (!found) return "Not clear";
-      if (found === "USA") return "United States";
-      if (found === "UK") return "United Kingdom";
-      return found;
+      const fromAffiliation = inferCountryFromAffiliations(affiliations);
+      if (fromAffiliation) return fromAffiliation;
+
+      // Fallback only: scan the full text if affiliation parsing fails.
+      const fallback = normalizeCountry(`${affiliations.join(" ")} ${text}`);
+      return fallback || "Not clear";
     }
 
     function summarizeAbstract(abstract = "") {
@@ -553,7 +640,8 @@
         const summary = description.briefSummary || description.detailedDescription || "No summary available.";
         const interventions = (arms.interventions || []).map(i => `${i.name || ""} ${(i.description || "")}`).join(" ");
         const locations = (contacts.locations || []).map(l => [l.country, l.city, l.facility].filter(Boolean).join(" / "));
-        const country = contacts.locations?.[0]?.country || inferCountry(locations, summary);
+        const locationCountries = Array.from(new Set((contacts.locations || []).map(l => l.country).filter(Boolean))).sort();
+        const country = locationCountries.length > 1 ? "Multinational" : (locationCountries[0] || inferCountry(locations, summary));
         const startYear = status.startDateStruct?.date?.slice(0, 4) || "N/A";
         const lastUpdate = status.lastUpdatePostDateStruct?.date || status.studyFirstPostDateStruct?.date || "N/A";
         const combined = `${title} ${summary} ${conditions.conditions?.join(" ") || ""} ${interventions} ${locations.join(" ")}`;
