@@ -97,7 +97,7 @@
     }
     .controls {
       display: grid;
-      grid-template-columns: 6fr 1.7fr 1.2fr 1.7fr 1.7fr;
+      grid-template-columns: 5.5fr 1.5fr 1.1fr 1.5fr 1.5fr 1.5fr;
       gap: 14px;
       align-items: start;
     }
@@ -352,6 +352,12 @@
             <option value="Not specified">Not specified</option>
           </select>
         </div>
+        <div>
+          <label for="countryFilter">Country</label>
+          <select id="countryFilter">
+            <option value="All">All</option>
+          </select>
+        </div>
       </div>
     </section>
 
@@ -398,7 +404,7 @@
     </main>
 
     <footer>
-      Data sources: PubMed via NCBI E-utilities and ClinicalTrials.gov API v2. The default search excludes standalone SIRT/sirtuin terms to reduce false positives. Results are loaded by page to improve performance on mobile devices. Classification, device tagging, country inference, and summaries are rule-based and should be manually verified before external or promotional use.
+      Data sources: PubMed via NCBI E-utilities and ClinicalTrials.gov API v2. The default search excludes standalone SIRT/sirtuin terms to reduce false positives. Results are loaded by page to improve performance on mobile devices. Classification, device tagging, country inference, and summaries are rule-based and should be manually verified before external or promotional use. Country is inferred from available affiliation or trial location data and may require manual confirmation.
     </footer>
   </div>
 
@@ -572,6 +578,7 @@
     function getFilteredRows() {
       const categoryFilter = $("categoryFilter").value;
       const deviceFilter = $("deviceFilter").value;
+      const countryFilter = $("countryFilter").value;
       const rows = activeTab === "papers" ? papers : trials;
 
       return rows.filter(r => {
@@ -584,7 +591,8 @@
             deviceMatch = r.device === deviceFilter;
           }
         }
-        return categoryMatch && deviceMatch;
+        const countryMatch = countryFilter === "All" || r.country === countryFilter;
+        return categoryMatch && deviceMatch && countryMatch;
       });
     }
 
@@ -594,6 +602,18 @@
       [...papers, ...trials].forEach(x => String(x.category || "Unclassified").split(" / ").forEach(c => set.add(c)));
       $("categoryFilter").innerHTML = Array.from(set).map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");
       if (set.has(selected)) $("categoryFilter").value = selected;
+    }
+
+    function updateCountryOptions() {
+      const selected = $("countryFilter").value;
+      const set = new Set(["All"]);
+      [...papers, ...trials]
+        .map(x => x.country || "Not clear")
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b))
+        .forEach(c => set.add(c));
+      $("countryFilter").innerHTML = Array.from(set).map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");
+      if (set.has(selected)) $("countryFilter").value = selected;
     }
 
     function escapeHtml(str = "") {
@@ -607,13 +627,14 @@
 
     function render() {
       updateCategoryOptions();
+      updateCountryOptions();
       const rows = getFilteredRows();
 
       $("paperCount").textContent = papers.length;
       $("trialCount").textContent = trials.length;
       $("filteredCount").textContent = rows.length;
       $("lookbackStat").textContent = $("daysBack").value === "all" ? "All" : `${$("daysBack").value}d`;
-      $("filterText").textContent = `${$("categoryFilter").value} / ${$("deviceFilter").value}`;
+      $("filterText").textContent = `${$("categoryFilter").value} / ${$("deviceFilter").value} / ${$("countryFilter").value}`;
       $("exportBtn").disabled = rows.length === 0;
 
       const isPapers = activeTab === "papers";
@@ -627,7 +648,7 @@
       $("nextPageBtn").disabled = !hasNext;
 
       if (!rows.length) {
-        $("results").innerHTML = `<div class="empty"><strong>No records found.</strong><br/>Try expanding the lookback window, selecting “No time limit,” changing the microsphere type filter, or adjusting the search expression.</div>`;
+        $("results").innerHTML = `<div class="empty"><strong>No records found.</strong><br/>Try expanding the lookback window, selecting “No time limit,” changing the microsphere type or country filter, or adjusting the search expression.</div>`;
         return;
       }
 
@@ -814,6 +835,7 @@
     $("prevPageBtn").addEventListener("click", goPreviousPage);
     $("categoryFilter").addEventListener("change", render);
     $("deviceFilter").addEventListener("change", render);
+    $("countryFilter").addEventListener("change", render);
     $("daysBack").addEventListener("change", render);
 
     $("papersTab").addEventListener("click", () => {
