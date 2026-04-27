@@ -185,6 +185,19 @@
       color: var(--muted);
       font-size: 13px;
     }
+    .paginationBar {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 10px;
+      margin: -4px 0 14px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .paginationBar button {
+      padding: 8px 12px;
+      border-radius: 12px;
+    }
     .results {
       display: grid;
       gap: 14px;
@@ -302,7 +315,7 @@
       <div class="controls">
         <div>
           <label for="query">Search expression</label>
-          <textarea id="query">(Y90 OR "Y-90" OR "yttrium-90" OR "yttrium 90" OR SIRT OR radioembolization OR "selective internal radiation therapy")</textarea>
+          <textarea id="query">("Y-90" OR Y90 OR "yttrium-90" OR "yttrium 90" OR radioembolization OR "radio-embolization" OR "selective internal radiation therapy" OR "yttrium-90 microspheres" OR "Y-90 microspheres")</textarea>
         </div>
         <div>
           <label for="daysBack">PubMed lookback</label>
@@ -319,7 +332,7 @@
           </select>
         </div>
         <div>
-          <label for="maxResults">Limit</label>
+          <label for="maxResults">Results per page</label>
           <input id="maxResults" type="number" min="5" max="100" value="25" />
         </div>
         <div>
@@ -337,7 +350,6 @@
             <option value="Resin">Resin</option>
             <option value="Both">Both / Glass + Resin</option>
             <option value="Not specified">Not specified</option>
-            <option value="Holmium-166">Holmium-166</option>
           </select>
         </div>
       </div>
@@ -372,6 +384,12 @@
       <div class="filterNote">Current filters: <span id="filterText">All</span></div>
     </section>
 
+    <section class="paginationBar">
+      <button id="prevPageBtn" disabled>Previous</button>
+      <span id="pageInfo">Page 1</span>
+      <button id="nextPageBtn" disabled>Next</button>
+    </section>
+
     <main id="results" class="results">
       <div class="empty">
         <strong>No records yet.</strong><br/>
@@ -380,7 +398,7 @@
     </main>
 
     <footer>
-      Data sources: PubMed via NCBI E-utilities and ClinicalTrials.gov API v2. Classification, device tagging, country inference, and summaries are rule-based and should be manually verified before external or promotional use.
+      Data sources: PubMed via NCBI E-utilities and ClinicalTrials.gov API v2. The default search excludes standalone SIRT/sirtuin terms to reduce false positives. Results are loaded by page to improve performance on mobile devices. Classification, device tagging, country inference, and summaries are rule-based and should be manually verified before external or promotional use.
     </footer>
   </div>
 
@@ -398,8 +416,7 @@
 
     const DEVICE_RULES = [
       { label: "Glass", keywords: ["glass microsphere", "glass microspheres", "therasphere", "glass y90", "glass y-90"] },
-      { label: "Resin", keywords: ["resin microsphere", "resin microspheres", "sir-spheres", "sirspheres", "resin y90", "resin y-90"] },
-      { label: "Holmium-166", keywords: ["holmium", "166ho", "ho-166", "quirem"] }
+      { label: "Resin", keywords: ["resin microsphere", "resin microspheres", "sir-spheres", "sirspheres", "resin y90", "resin y-90"] }
     ];
 
     const COUNTRY_HINTS = [
@@ -409,6 +426,15 @@
     let papers = [];
     let trials = [];
     let activeTab = "papers";
+
+    let pubmedHistory = [];
+    let pubmedPage = 0;
+    let pubmedNextStart = null;
+    let pubmedTotal = 0;
+
+    let trialHistory = [];
+    let trialPage = 0;
+    let trialNextToken = null;
 
     const $ = id => document.getElementById(id);
 
@@ -454,27 +480,31 @@
       return Array.from(node.querySelectorAll(selector)).map(x => x.textContent?.trim()).filter(Boolean);
     }
 
-    async function fetchPubMed(query, daysBack, maxResults) {
+    async function fetchPubMed(query, daysBack, maxResults, retstart = 0) {
       let term = query;
+      // Avoid false positives from SIRT1/SIRT2/sirtuin literature unrelated to radioembolization.
+      term = `(${term}) NOT (SIRT1 OR SIRT2 OR SIRT3 OR SIRT4 OR SIRT5 OR SIRT6 OR SIRT7 OR sirtuin OR sirtuins)`;
       if (daysBack !== "all") {
         const today = new Date();
         const start = new Date(today);
         start.setDate(today.getDate() - Number(daysBack));
         const mindate = start.toISOString().slice(0, 10).replaceAll("-", "/");
         const maxdate = today.toISOString().slice(0, 10).replaceAll("-", "/");
-        term = `${query} AND (${mindate}:${maxdate}[pdat])`;
+        term = `${term} AND (${mindate}:${maxdate}[pdat])`;
       }
-      const esearchUrl = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&sort=pub+date&retmax=${maxResults}&term=${encodeURIComponent(term)}`;
+      const esearchUrl = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&sort=pub+date&retmax=${maxResults}&retstart=${retstart}&term=${encodeURIComponent(term)}`;
       const esearch = await fetch(esearchUrl).then(r => r.json());
       const ids = esearch?.esearchresult?.idlist || [];
-      if (!ids.length) return [];
+      const total = Number(esearch?.esearchresult?.count || 0);
+      const nextStart = retstart + ids.length < total ? retstart + ids.length : null;
+      if (!ids.length) return { rows: [], total, nextStart };
 
       const efetchUrl = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&retmode=xml&id=${ids.join(",")}`;
       const xmlText = await fetch(efetchUrl).then(r => r.text());
       const xml = new DOMParser().parseFromString(xmlText, "text/xml");
       const articles = Array.from(xml.querySelectorAll("PubmedArticle"));
 
-      return articles.map(article => {
+      const rows = articles.map(article => {
         const pmid = getText(article, "PMID");
         const title = getText(article, "ArticleTitle") || "Untitled";
         const journal = getText(article, "Journal > Title") || getText(article, "ISOAbbreviation") || "Journal not listed";
@@ -491,14 +521,18 @@
           url: `https://pubmed.ncbi.nlm.nih.gov/${pmid}/`
         };
       });
+
+      return { rows, total, nextStart };
     }
 
-    async function fetchClinicalTrials(query, maxResults) {
-      const url = `https://clinicaltrials.gov/api/v2/studies?query.term=${encodeURIComponent(query)}&pageSize=${maxResults}&format=json`;
+    async function fetchClinicalTrials(query, maxResults, pageToken = "") {
+      const trialQuery = `(${query}) NOT SIRT1 NOT SIRT2 NOT SIRT3 NOT SIRT4 NOT SIRT5 NOT SIRT6 NOT SIRT7 NOT sirtuin`;
+      const tokenParam = pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : "";
+      const url = `https://clinicaltrials.gov/api/v2/studies?query.term=${encodeURIComponent(trialQuery)}&pageSize=${maxResults}${tokenParam}&format=json`;
       const data = await fetch(url).then(r => r.json());
       const studies = data?.studies || [];
 
-      return studies.map(study => {
+      const rows = studies.map(study => {
         const protocol = study.protocolSection || {};
         const identification = protocol.identificationModule || {};
         const status = protocol.statusModule || {};
@@ -531,6 +565,8 @@
           url: `https://clinicaltrials.gov/study/${nctId}`
         };
       });
+
+      return { rows, nextToken: data?.nextPageToken || null };
     }
 
     function getFilteredRows() {
@@ -579,6 +615,16 @@
       $("lookbackStat").textContent = $("daysBack").value === "all" ? "All" : `${$("daysBack").value}d`;
       $("filterText").textContent = `${$("categoryFilter").value} / ${$("deviceFilter").value}`;
       $("exportBtn").disabled = rows.length === 0;
+
+      const isPapers = activeTab === "papers";
+      const pageNumber = isPapers ? pubmedPage + 1 : trialPage + 1;
+      const hasPrevious = isPapers ? pubmedPage > 0 : trialPage > 0;
+      const hasNext = isPapers ? Boolean(pubmedNextStart) : Boolean(trialNextToken);
+      $("pageInfo").textContent = isPapers
+        ? `Page ${pageNumber}${pubmedTotal ? ` · ${pubmedTotal} PubMed records found` : ""}`
+        : `Page ${pageNumber}`;
+      $("prevPageBtn").disabled = !hasPrevious;
+      $("nextPageBtn").disabled = !hasNext;
 
       if (!rows.length) {
         $("results").innerHTML = `<div class="empty"><strong>No records found.</strong><br/>Try expanding the lookback window, selecting “No time limit,” changing the microsphere type filter, or adjusting the search expression.</div>`;
@@ -662,13 +708,25 @@
       try {
         const query = $("query").value;
         const daysBack = $("daysBack").value;
-        const maxResults = $("maxResults").value;
-        const [pubmedRows, trialRows] = await Promise.all([
-          fetchPubMed(query, daysBack, maxResults),
-          fetchClinicalTrials(query, maxResults)
+        const maxResults = Number($("maxResults").value);
+
+        const [pubmedResult, trialResult] = await Promise.all([
+          fetchPubMed(query, daysBack, maxResults, 0),
+          fetchClinicalTrials(query, maxResults, "")
         ]);
-        papers = pubmedRows;
-        trials = trialRows;
+
+        papers = pubmedResult.rows;
+        trials = trialResult.rows;
+
+        pubmedHistory = [0];
+        pubmedPage = 0;
+        pubmedNextStart = pubmedResult.nextStart;
+        pubmedTotal = pubmedResult.total;
+
+        trialHistory = [""];
+        trialPage = 0;
+        trialNextToken = trialResult.nextToken;
+
         $("lastUpdated").textContent = `Last updated: ${new Date().toLocaleString()}`;
         render();
       } catch (error) {
@@ -681,8 +739,79 @@
       }
     }
 
+
+    async function goNextPage() {
+      $("errorBox").style.display = "none";
+      $("nextPageBtn").disabled = true;
+      try {
+        const query = $("query").value;
+        const daysBack = $("daysBack").value;
+        const maxResults = Number($("maxResults").value);
+
+        if (activeTab === "papers" && pubmedNextStart !== null) {
+          const result = await fetchPubMed(query, daysBack, maxResults, pubmedNextStart);
+          papers = result.rows;
+          pubmedHistory.push(pubmedNextStart);
+          pubmedPage += 1;
+          pubmedNextStart = result.nextStart;
+          pubmedTotal = result.total;
+        }
+
+        if (activeTab === "trials" && trialNextToken) {
+          const result = await fetchClinicalTrials(query, maxResults, trialNextToken);
+          trials = result.rows;
+          trialHistory.push(trialNextToken);
+          trialPage += 1;
+          trialNextToken = result.nextToken;
+        }
+
+        render();
+      } catch (error) {
+        console.error(error);
+        $("errorBox").textContent = "Unable to load the next page.";
+        $("errorBox").style.display = "block";
+      }
+    }
+
+    async function goPreviousPage() {
+      $("errorBox").style.display = "none";
+      $("prevPageBtn").disabled = true;
+      try {
+        const query = $("query").value;
+        const daysBack = $("daysBack").value;
+        const maxResults = Number($("maxResults").value);
+
+        if (activeTab === "papers" && pubmedPage > 0) {
+          const previousStart = pubmedHistory[pubmedPage - 1];
+          const result = await fetchPubMed(query, daysBack, maxResults, previousStart);
+          papers = result.rows;
+          pubmedPage -= 1;
+          pubmedHistory = pubmedHistory.slice(0, pubmedPage + 1);
+          pubmedNextStart = result.nextStart;
+          pubmedTotal = result.total;
+        }
+
+        if (activeTab === "trials" && trialPage > 0) {
+          const previousToken = trialHistory[trialPage - 1];
+          const result = await fetchClinicalTrials(query, maxResults, previousToken);
+          trials = result.rows;
+          trialPage -= 1;
+          trialHistory = trialHistory.slice(0, trialPage + 1);
+          trialNextToken = result.nextToken;
+        }
+
+        render();
+      } catch (error) {
+        console.error(error);
+        $("errorBox").textContent = "Unable to load the previous page.";
+        $("errorBox").style.display = "block";
+      }
+    }
+
     $("searchBtn").addEventListener("click", runSearch);
     $("exportBtn").addEventListener("click", downloadCsv);
+    $("nextPageBtn").addEventListener("click", goNextPage);
+    $("prevPageBtn").addEventListener("click", goPreviousPage);
     $("categoryFilter").addEventListener("change", render);
     $("deviceFilter").addEventListener("change", render);
     $("daysBack").addEventListener("change", render);
