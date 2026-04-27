@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Y-90 Literature & Clinical Trial Monitor</title>
+  <style>
+    :root {
+      --bg: #f6f7fb;
+      --card: #ffffff;
+      --text: #111827;
+      --muted: #6b7280;
+      --border: #e5e7eb;
+      --primary: #111827;
+      --primaryText: #ffffff;
+      --soft: #f3f4f6;
+      --warningBg: #fff7ed;
+      --warningText: #9a3412;
+      --warningBorder: #fed7aa;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      background: linear-gradient(135deg, #f8fafc, #ffffff, #eef2f7);
+      color: var(--text);
+    }
+    .container {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 28px;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      gap: 20px;
+      align-items: flex-end;
+      margin-bottom: 22px;
+    }
+    h1 {
+      margin: 8px 0 8px;
+      font-size: 34px;
+      letter-spacing: -0.03em;
+    }
+    p { line-height: 1.6; }
+    .tagline {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 12px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: white;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .intro {
+      max-width: 860px;
+      color: var(--muted);
+      margin: 0;
+    }
+    .actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    button, select, input, textarea {
+      font-family: inherit;
+      font-size: 14px;
+    }
+    button {
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 11px 15px;
+      background: white;
+      cursor: pointer;
+      font-weight: 650;
+    }
+    button.primary {
+      background: var(--primary);
+      color: var(--primaryText);
+      border-color: var(--primary);
+    }
+    button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+    .panel, .card {
+      background: rgba(255,255,255,0.92);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      box-shadow: 0 8px 24px rgba(15,23,42,0.05);
+    }
+    .panel {
+      padding: 18px;
+      margin-bottom: 18px;
+    }
+    .controls {
+      display: grid;
+      grid-template-columns: 6fr 1.7fr 1.2fr 1.7fr 1.7fr;
+      gap: 14px;
+      align-items: start;
+    }
+    label {
+      display: block;
+      color: #374151;
+      font-size: 13px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    textarea, select, input {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 12px;
+      background: white;
+      color: var(--text);
+      outline: none;
+    }
+    textarea {
+      min-height: 108px;
+      resize: vertical;
+    }
+    .lastUpdated {
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 12px;
+    }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+    .stat {
+      padding: 16px;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+    .statIcon {
+      width: 38px;
+      height: 38px;
+      border-radius: 14px;
+      background: var(--soft);
+      display: grid;
+      place-items: center;
+      font-size: 20px;
+    }
+    .statLabel {
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .statValue {
+      font-size: 24px;
+      font-weight: 750;
+      margin-top: 2px;
+    }
+    .tabs {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .tabBtns {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 17px;
+      padding: 4px;
+      display: inline-flex;
+      gap: 4px;
+    }
+    .tabBtns button {
+      border: none;
+      box-shadow: none;
+      border-radius: 13px;
+      color: var(--muted);
+    }
+    .tabBtns button.active {
+      background: var(--primary);
+      color: white;
+    }
+    .filterNote {
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .results {
+      display: grid;
+      gap: 14px;
+    }
+    .resultCard {
+      padding: 20px;
+      transition: 0.2s ease;
+    }
+    .resultCard:hover {
+      box-shadow: 0 12px 32px rgba(15,23,42,0.08);
+    }
+    .resultHeader {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: flex-start;
+    }
+    .resultTitle {
+      font-size: 17px;
+      font-weight: 750;
+      margin: 0;
+      line-height: 1.45;
+    }
+    .meta {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .openLink {
+      flex-shrink: 0;
+      text-decoration: none;
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 9px 11px;
+      font-weight: 650;
+      font-size: 13px;
+      background: white;
+    }
+    .pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 13px 0;
+    }
+    .pill {
+      border: 1px solid var(--border);
+      background: #fff;
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 12px;
+      font-weight: 650;
+      color: #374151;
+    }
+    .summary {
+      color: #374151;
+      font-size: 14px;
+      margin: 0;
+    }
+    .empty {
+      text-align: center;
+      padding: 44px;
+      color: var(--muted);
+      border: 1px dashed #cbd5e1;
+      border-radius: 24px;
+      background: rgba(255,255,255,0.65);
+    }
+    .error {
+      display: none;
+      margin-bottom: 18px;
+      border: 1px solid var(--warningBorder);
+      background: var(--warningBg);
+      color: var(--warningText);
+      padding: 14px 16px;
+      border-radius: 18px;
+      font-size: 14px;
+    }
+    footer {
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 24px;
+      border-top: 1px solid var(--border);
+      padding-top: 16px;
+      line-height: 1.6;
+    }
+    @media (max-width: 900px) {
+      header { flex-direction: column; align-items: flex-start; }
+      .controls { grid-template-columns: 1fr; }
+      .stats { grid-template-columns: repeat(2, 1fr); }
+      .resultHeader { flex-direction: column; }
+    }
+    @media (max-width: 560px) {
+      .container { padding: 18px; }
+      h1 { font-size: 28px; }
+      .stats { grid-template-columns: 1fr; }
+      .tabs { flex-direction: column; align-items: flex-start; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <div class="tagline">🔬 Y-90 Literature & Trial Intelligence Monitor</div>
+        <h1>Daily Y-90 Publication & Clinical Trial Monitor</h1>
+        <p class="intro">Track new PubMed publications and ClinicalTrials.gov studies related to Y-90, yttrium-90, SIRT, and radioembolization. Results are categorized and summarized for quick field-readiness review.</p>
+      </div>
+      <div class="actions">
+        <button id="searchBtn" class="primary">Search Now</button>
+        <button id="exportBtn" disabled>Export CSV</button>
+      </div>
+    </header>
+
+    <section class="panel">
+      <div class="controls">
+        <div>
+          <label for="query">Search expression</label>
+          <textarea id="query">(Y90 OR "Y-90" OR "yttrium-90" OR "yttrium 90" OR SIRT OR radioembolization OR "selective internal radiation therapy")</textarea>
+        </div>
+        <div>
+          <label for="daysBack">PubMed lookback</label>
+          <select id="daysBack">
+            <option value="1">Today / last 1 day</option>
+            <option value="7">Last 7 days</option>
+            <option value="30" selected>Last 30 days</option>
+            <option value="90">Last 90 days</option>
+            <option value="180">Last 180 days</option>
+            <option value="365">Last 1 year</option>
+            <option value="1825">Last 5 years</option>
+            <option value="3650">Last 10 years</option>
+            <option value="all">No time limit</option>
+          </select>
+        </div>
+        <div>
+          <label for="maxResults">Limit</label>
+          <input id="maxResults" type="number" min="5" max="100" value="25" />
+        </div>
+        <div>
+          <label for="categoryFilter">Category filter</label>
+          <select id="categoryFilter">
+            <option value="All">All</option>
+          </select>
+          <div id="lastUpdated" class="lastUpdated"></div>
+        </div>
+        <div>
+          <label for="deviceFilter">Microsphere type</label>
+          <select id="deviceFilter">
+            <option value="All">All</option>
+            <option value="Glass">Glass</option>
+            <option value="Resin">Resin</option>
+            <option value="Both">Both / Glass + Resin</option>
+            <option value="Not specified">Not specified</option>
+            <option value="Holmium-166">Holmium-166</option>
+          </select>
+        </div>
+      </div>
+    </section>
+
+    <div id="errorBox" class="error"></div>
+
+    <section class="stats">
+      <div class="card stat">
+        <div class="statIcon">📄</div>
+        <div><div class="statLabel">PubMed articles</div><div id="paperCount" class="statValue">0</div></div>
+      </div>
+      <div class="card stat">
+        <div class="statIcon">🧪</div>
+        <div><div class="statLabel">Clinical trials</div><div id="trialCount" class="statValue">0</div></div>
+      </div>
+      <div class="card stat">
+        <div class="statIcon">🧩</div>
+        <div><div class="statLabel">Filtered results</div><div id="filteredCount" class="statValue">0</div></div>
+      </div>
+      <div class="card stat">
+        <div class="statIcon">📆</div>
+        <div><div class="statLabel">Lookback window</div><div id="lookbackStat" class="statValue">30d</div></div>
+      </div>
+    </section>
+
+    <section class="tabs">
+      <div class="tabBtns">
+        <button id="papersTab" class="active">PubMed Publications</button>
+        <button id="trialsTab">ClinicalTrials.gov</button>
+      </div>
+      <div class="filterNote">Current filters: <span id="filterText">All</span></div>
+    </section>
+
+    <main id="results" class="results">
+      <div class="empty">
+        <strong>No records yet.</strong><br/>
+        Click “Search Now” to retrieve recent PubMed publications and ClinicalTrials.gov studies.
+      </div>
+    </main>
+
+    <footer>
+      Data sources: PubMed via NCBI E-utilities and ClinicalTrials.gov API v2. Classification, device tagging, country inference, and summaries are rule-based and should be manually verified before external or promotional use.
+    </footer>
+  </div>
+
+  <script>
+    const CATEGORY_RULES = [
+      { label: "Dosimetry", keywords: ["dosimetry", "absorbed dose", "tumor dose", "normal liver dose", "partition", "voxel", "dose-response", "activity planning", "MIRD"] },
+      { label: "Efficacy", keywords: ["efficacy", "survival", "overall survival", "progression-free", "response", "objective response", "complete response", "disease control", "tumor control"] },
+      { label: "Safety", keywords: ["safety", "toxicity", "adverse", "complication", "radiation-induced", "REILD", "hepatotoxicity", "bilirubin", "lung shunt", "pneumonitis"] },
+      { label: "Comparative", keywords: ["versus", "compared", "comparison", "comparative", "resin", "glass", "TACE", "sorafenib", "lenvatinib", "immunotherapy", "ablation", "systemic therapy"] },
+      { label: "Consensus / Guideline", keywords: ["guideline", "consensus", "recommendation", "position paper", "expert opinion", "practice parameter", "EANM", "SIR", "CIRSE", "ESMO", "BCLC"] },
+      { label: "Combination Therapy", keywords: ["combination", "atezolizumab", "bevacizumab", "durvalumab", "tremelimumab", "pembrolizumab", "nivolumab", "lenvatinib", "sintilimab", "chemotherapy"] },
+      { label: "Technique / Workflow", keywords: ["mapping", "MAA", "workflow", "same-day", "administration", "catheter", "simulation", "scout", "planning angiography"] },
+      { label: "Review", keywords: ["review", "systematic review", "meta-analysis", "narrative review"] }
+    ];
+
+    const DEVICE_RULES = [
+      { label: "Glass", keywords: ["glass microsphere", "glass microspheres", "therasphere", "glass y90", "glass y-90"] },
+      { label: "Resin", keywords: ["resin microsphere", "resin microspheres", "sir-spheres", "sirspheres", "resin y90", "resin y-90"] },
+      { label: "Holmium-166", keywords: ["holmium", "166ho", "ho-166", "quirem"] }
+    ];
+
+    const COUNTRY_HINTS = [
+      "United States", "USA", "Canada", "United Kingdom", "UK", "France", "Germany", "Italy", "Spain", "Netherlands", "Belgium", "Switzerland", "Austria", "Sweden", "Denmark", "Norway", "Finland", "Poland", "Turkey", "Israel", "China", "Taiwan", "Japan", "Korea", "South Korea", "Singapore", "Thailand", "Malaysia", "India", "Australia", "New Zealand", "Brazil", "Argentina", "Mexico", "Egypt", "Saudi Arabia"
+    ];
+
+    let papers = [];
+    let trials = [];
+    let activeTab = "papers";
+
+    const $ = id => document.getElementById(id);
+
+    function normalize(text = "") { return text.toLowerCase(); }
+
+    function classifyCategory(text = "") {
+      const t = normalize(text);
+      const hits = CATEGORY_RULES
+        .map(rule => ({ label: rule.label, score: rule.keywords.reduce((acc, kw) => acc + (t.includes(kw.toLowerCase()) ? 1 : 0), 0) }))
+        .filter(x => x.score > 0)
+        .sort((a, b) => b.score - a.score);
+      return hits.length ? hits.slice(0, 2).map(x => x.label).join(" / ") : "Unclassified";
+    }
+
+    function classifyDevice(text = "") {
+      const t = normalize(text);
+      const matches = DEVICE_RULES.filter(rule => rule.keywords.some(kw => t.includes(kw.toLowerCase()))).map(rule => rule.label);
+      if (matches.includes("Glass") && matches.includes("Resin")) return "Glass + Resin";
+      return matches[0] || "Not specified";
+    }
+
+    function inferCountry(affiliations = [], text = "") {
+      const joined = `${affiliations.join(" ")} ${text}`;
+      const found = COUNTRY_HINTS.find(c => joined.toLowerCase().includes(c.toLowerCase()));
+      if (!found) return "Not clear";
+      if (found === "USA") return "United States";
+      if (found === "UK") return "United Kingdom";
+      return found;
+    }
+
+    function summarizeAbstract(abstract = "") {
+      if (!abstract) return "No abstract available. Manual review is recommended.";
+      const clean = abstract.replace(/\s+/g, " ").trim();
+      const sentences = clean.match(/[^.!?]+[.!?]+/g) || [clean];
+      return sentences.slice(0, 3).join(" ").slice(0, 850);
+    }
+
+    function getText(node, selector) {
+      return node.querySelector(selector)?.textContent?.trim() || "";
+    }
+
+    function getAllText(node, selector) {
+      return Array.from(node.querySelectorAll(selector)).map(x => x.textContent?.trim()).filter(Boolean);
+    }
+
+    async function fetchPubMed(query, daysBack, maxResults) {
+      let term = query;
+      if (daysBack !== "all") {
+        const today = new Date();
+        const start = new Date(today);
+        start.setDate(today.getDate() - Number(daysBack));
+        const mindate = start.toISOString().slice(0, 10).replaceAll("-", "/");
+        const maxdate = today.toISOString().slice(0, 10).replaceAll("-", "/");
+        term = `${query} AND (${mindate}:${maxdate}[pdat])`;
+      }
+      const esearchUrl = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&sort=pub+date&retmax=${maxResults}&term=${encodeURIComponent(term)}`;
+      const esearch = await fetch(esearchUrl).then(r => r.json());
+      const ids = esearch?.esearchresult?.idlist || [];
+      if (!ids.length) return [];
+
+      const efetchUrl = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&retmode=xml&id=${ids.join(",")}`;
+      const xmlText = await fetch(efetchUrl).then(r => r.text());
+      const xml = new DOMParser().parseFromString(xmlText, "text/xml");
+      const articles = Array.from(xml.querySelectorAll("PubmedArticle"));
+
+      return articles.map(article => {
+        const pmid = getText(article, "PMID");
+        const title = getText(article, "ArticleTitle") || "Untitled";
+        const journal = getText(article, "Journal > Title") || getText(article, "ISOAbbreviation") || "Journal not listed";
+        const year = getText(article, "PubDate > Year") || getText(article, "ArticleDate > Year") || "N/A";
+        const abstract = getAllText(article, "AbstractText").join(" ");
+        const affiliations = getAllText(article, "Affiliation");
+        const combined = `${title} ${abstract} ${journal} ${affiliations.join(" ")}`;
+        return {
+          pmid, title, journal, year, abstract,
+          category: classifyCategory(combined),
+          device: classifyDevice(combined),
+          country: inferCountry(affiliations, combined),
+          summary: summarizeAbstract(abstract),
+          url: `https://pubmed.ncbi.nlm.nih.gov/${pmid}/`
+        };
+      });
+    }
+
+    async function fetchClinicalTrials(query, maxResults) {
+      const url = `https://clinicaltrials.gov/api/v2/studies?query.term=${encodeURIComponent(query)}&pageSize=${maxResults}&format=json`;
+      const data = await fetch(url).then(r => r.json());
+      const studies = data?.studies || [];
+
+      return studies.map(study => {
+        const protocol = study.protocolSection || {};
+        const identification = protocol.identificationModule || {};
+        const status = protocol.statusModule || {};
+        const design = protocol.designModule || {};
+        const conditions = protocol.conditionsModule || {};
+        const arms = protocol.armsInterventionsModule || {};
+        const contacts = protocol.contactsLocationsModule || {};
+        const description = protocol.descriptionModule || {};
+
+        const nctId = identification.nctId || "N/A";
+        const title = identification.briefTitle || identification.officialTitle || "Untitled";
+        const summary = description.briefSummary || description.detailedDescription || "No summary available.";
+        const interventions = (arms.interventions || []).map(i => `${i.name || ""} ${(i.description || "")}`).join(" ");
+        const locations = (contacts.locations || []).map(l => [l.country, l.city, l.facility].filter(Boolean).join(" / "));
+        const country = contacts.locations?.[0]?.country || inferCountry(locations, summary);
+        const startYear = status.startDateStruct?.date?.slice(0, 4) || "N/A";
+        const lastUpdate = status.lastUpdatePostDateStruct?.date || status.studyFirstPostDateStruct?.date || "N/A";
+        const combined = `${title} ${summary} ${conditions.conditions?.join(" ") || ""} ${interventions} ${locations.join(" ")}`;
+
+        return {
+          nctId, title,
+          status: status.overallStatus || "N/A",
+          phase: design.phases?.join(" / ") || "N/A",
+          year: startYear,
+          lastUpdate,
+          category: classifyCategory(combined),
+          device: classifyDevice(combined),
+          country,
+          summary: summarizeAbstract(summary),
+          url: `https://clinicaltrials.gov/study/${nctId}`
+        };
+      });
+    }
+
+    function getFilteredRows() {
+      const categoryFilter = $("categoryFilter").value;
+      const deviceFilter = $("deviceFilter").value;
+      const rows = activeTab === "papers" ? papers : trials;
+
+      return rows.filter(r => {
+        const categoryMatch = categoryFilter === "All" || r.category.includes(categoryFilter);
+        let deviceMatch = true;
+        if (deviceFilter !== "All") {
+          if (deviceFilter === "Both") {
+            deviceMatch = r.device === "Glass + Resin";
+          } else {
+            deviceMatch = r.device === deviceFilter;
+          }
+        }
+        return categoryMatch && deviceMatch;
+      });
+    }
+
+    function updateCategoryOptions() {
+      const selected = $("categoryFilter").value;
+      const set = new Set(["All"]);
+      [...papers, ...trials].forEach(x => String(x.category || "Unclassified").split(" / ").forEach(c => set.add(c)));
+      $("categoryFilter").innerHTML = Array.from(set).map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");
+      if (set.has(selected)) $("categoryFilter").value = selected;
+    }
+
+    function escapeHtml(str = "") {
+      return String(str)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function render() {
+      updateCategoryOptions();
+      const rows = getFilteredRows();
+
+      $("paperCount").textContent = papers.length;
+      $("trialCount").textContent = trials.length;
+      $("filteredCount").textContent = rows.length;
+      $("lookbackStat").textContent = $("daysBack").value === "all" ? "All" : `${$("daysBack").value}d`;
+      $("filterText").textContent = `${$("categoryFilter").value} / ${$("deviceFilter").value}`;
+      $("exportBtn").disabled = rows.length === 0;
+
+      if (!rows.length) {
+        $("results").innerHTML = `<div class="empty"><strong>No records found.</strong><br/>Try expanding the lookback window, selecting “No time limit,” changing the microsphere type filter, or adjusting the search expression.</div>`;
+        return;
+      }
+
+      $("results").innerHTML = rows.map(row => activeTab === "papers" ? renderPaper(row) : renderTrial(row)).join("");
+    }
+
+    function renderPaper(p) {
+      return `
+        <article class="card resultCard">
+          <div class="resultHeader">
+            <div>
+              <h2 class="resultTitle">${escapeHtml(p.title)}</h2>
+              <div class="meta">${escapeHtml(p.journal)} · ${escapeHtml(p.year)} · PMID: ${escapeHtml(p.pmid)}</div>
+            </div>
+            <a class="openLink" href="${escapeHtml(p.url)}" target="_blank" rel="noreferrer">Open ↗</a>
+          </div>
+          <div class="pills">
+            <span class="pill">${escapeHtml(p.category)}</span>
+            <span class="pill">${escapeHtml(p.device)}</span>
+            <span class="pill">${escapeHtml(p.country)}</span>
+          </div>
+          <p class="summary">${escapeHtml(p.summary)}</p>
+        </article>
+      `;
+    }
+
+    function renderTrial(t) {
+      return `
+        <article class="card resultCard">
+          <div class="resultHeader">
+            <div>
+              <h2 class="resultTitle">${escapeHtml(t.title)}</h2>
+              <div class="meta">${escapeHtml(t.nctId)} · ${escapeHtml(t.status)} · ${escapeHtml(t.phase)} · Start: ${escapeHtml(t.year)} · Last update: ${escapeHtml(t.lastUpdate)}</div>
+            </div>
+            <a class="openLink" href="${escapeHtml(t.url)}" target="_blank" rel="noreferrer">Open ↗</a>
+          </div>
+          <div class="pills">
+            <span class="pill">${escapeHtml(t.category)}</span>
+            <span class="pill">${escapeHtml(t.device)}</span>
+            <span class="pill">${escapeHtml(t.country)}</span>
+          </div>
+          <p class="summary">${escapeHtml(t.summary)}</p>
+        </article>
+      `;
+    }
+
+    function buildCsv(rows) {
+      const headers = activeTab === "papers"
+        ? ["Year", "Title", "Journal", "Category", "Country", "Device", "Summary", "PMID", "URL"]
+        : ["Year", "Last Update", "Title", "Status", "Phase", "Category", "Country", "Device", "Summary", "NCT ID", "URL"];
+
+      const lines = [headers];
+      rows.forEach(r => {
+        const map = activeTab === "papers"
+          ? { Year: r.year, Title: r.title, Journal: r.journal, Category: r.category, Country: r.country, Device: r.device, Summary: r.summary, PMID: r.pmid, URL: r.url }
+          : { Year: r.year, "Last Update": r.lastUpdate, Title: r.title, Status: r.status, Phase: r.phase, Category: r.category, Country: r.country, Device: r.device, Summary: r.summary, "NCT ID": r.nctId, URL: r.url };
+        lines.push(headers.map(h => String(map[h] ?? "").replaceAll('"', '""')));
+      });
+      return lines.map(row => row.map(cell => `"${cell}"`).join(",")).join("\n");
+    }
+
+    function downloadCsv() {
+      const rows = getFilteredRows();
+      const csv = buildCsv(rows);
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `y90_${activeTab}_${new Date().toISOString().slice(0,10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    async function runSearch() {
+      $("errorBox").style.display = "none";
+      $("searchBtn").disabled = true;
+      $("searchBtn").textContent = "Searching...";
+      try {
+        const query = $("query").value;
+        const daysBack = $("daysBack").value;
+        const maxResults = $("maxResults").value;
+        const [pubmedRows, trialRows] = await Promise.all([
+          fetchPubMed(query, daysBack, maxResults),
+          fetchClinicalTrials(query, maxResults)
+        ]);
+        papers = pubmedRows;
+        trials = trialRows;
+        $("lastUpdated").textContent = `Last updated: ${new Date().toLocaleString()}`;
+        render();
+      } catch (error) {
+        console.error(error);
+        $("errorBox").textContent = "Unable to fetch data. This may be due to API availability, browser/CORS restrictions, or local network policy. If this happens repeatedly, the next step is to deploy this with a lightweight backend proxy.";
+        $("errorBox").style.display = "block";
+      } finally {
+        $("searchBtn").disabled = false;
+        $("searchBtn").textContent = "Search Now";
+      }
+    }
+
+    $("searchBtn").addEventListener("click", runSearch);
+    $("exportBtn").addEventListener("click", downloadCsv);
+    $("categoryFilter").addEventListener("change", render);
+    $("deviceFilter").addEventListener("change", render);
+    $("daysBack").addEventListener("change", render);
+
+    $("papersTab").addEventListener("click", () => {
+      activeTab = "papers";
+      $("papersTab").classList.add("active");
+      $("trialsTab").classList.remove("active");
+      render();
+    });
+    $("trialsTab").addEventListener("click", () => {
+      activeTab = "trials";
+      $("trialsTab").classList.add("active");
+      $("papersTab").classList.remove("active");
+      render();
+    });
+
+    render();
+  </script>
+</body>
+</html>
