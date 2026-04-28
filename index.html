@@ -356,6 +356,7 @@
           <label for="countryFilter">Country</label>
           <select id="countryFilter">
             <option value="All">All</option>
+            <option value="Multinational">Multinational</option>
           </select>
         </div>
       </div>
@@ -404,7 +405,7 @@
     </main>
 
     <footer>
-      Data sources: PubMed via NCBI E-utilities and ClinicalTrials.gov API v2. The default search excludes standalone SIRT/sirtuin terms to reduce false positives. Results are loaded by page to improve performance on mobile devices. Classification, device tagging, country inference, and summaries are rule-based and should be manually verified before external or promotional use. For PubMed, country is inferred from the author affiliation address tail when available; for ClinicalTrials.gov, country uses trial location data. Manual confirmation is still recommended for multi-center or multi-affiliation publications.
+      Data sources: PubMed via NCBI E-utilities and ClinicalTrials.gov API v2. The default search excludes standalone SIRT/sirtuin terms to reduce false positives. Results are loaded by page to improve performance on mobile devices. Classification, device tagging, country inference, and summaries are rule-based and should be manually verified before external or promotional use. For PubMed, country is inferred from the author affiliation address tail when available; for ClinicalTrials.gov, country uses trial location data. The Multinational tag is inferred from multiple affiliation/location countries or explicit multicenter/international wording. Manual confirmation is still recommended for multi-center or multi-affiliation publications.
     </footer>
   </div>
 
@@ -521,7 +522,16 @@
         .trim();
     }
 
-    function inferCountryFromAffiliations(affiliations = []) {
+    function detectMultinationalLanguage(text = "") {
+      const t = String(text).toLowerCase();
+      return [
+        "multicenter", "multi-center", "multicentre", "multi-centre",
+        "international", "global", "worldwide", "multinational",
+        "across countries", "multiple countries"
+      ].some(keyword => t.includes(keyword));
+    }
+
+    function inferCountryFromAffiliations(affiliations = [], contextText = "") {
       // PubMed affiliations usually end with city / postal code / country.
       // Prioritize the tail of each affiliation instead of scanning the whole string.
       const counts = {};
@@ -545,12 +555,14 @@
         }
       });
 
-      const ranked = Object.entries(counts).sort((a, b) => b[1] - a[1]);
-      return ranked.length ? ranked[0][0] : "";
+      const countries = Object.keys(counts);
+      if (countries.length > 1) return "Multinational";
+      if (countries.length === 1 && detectMultinationalLanguage(contextText)) return "Multinational";
+      return countries.length ? countries[0] : "";
     }
 
     function inferCountry(affiliations = [], text = "") {
-      const fromAffiliation = inferCountryFromAffiliations(affiliations);
+      const fromAffiliation = inferCountryFromAffiliations(affiliations, text);
       if (fromAffiliation) return fromAffiliation;
 
       // Fallback only: scan the full text if affiliation parsing fails.
@@ -641,7 +653,9 @@
         const interventions = (arms.interventions || []).map(i => `${i.name || ""} ${(i.description || "")}`).join(" ");
         const locations = (contacts.locations || []).map(l => [l.country, l.city, l.facility].filter(Boolean).join(" / "));
         const locationCountries = Array.from(new Set((contacts.locations || []).map(l => l.country).filter(Boolean))).sort();
-        const country = locationCountries.length > 1 ? "Multinational" : (locationCountries[0] || inferCountry(locations, summary));
+        const country = locationCountries.length > 1
+          ? "Multinational"
+          : (locationCountries[0] || (detectMultinationalLanguage(`${title} ${summary}`) ? "Multinational" : inferCountry(locations, summary)));
         const startYear = status.startDateStruct?.date?.slice(0, 4) || "N/A";
         const lastUpdate = status.lastUpdatePostDateStruct?.date || status.studyFirstPostDateStruct?.date || "N/A";
         const combined = `${title} ${summary} ${conditions.conditions?.join(" ") || ""} ${interventions} ${locations.join(" ")}`;
@@ -694,7 +708,7 @@
 
     function updateCountryOptions() {
       const selected = $("countryFilter").value;
-      const set = new Set(["All"]);
+      const set = new Set(["All", "Multinational"]);
       [...papers, ...trials]
         .map(x => x.country || "Not clear")
         .filter(Boolean)
@@ -736,7 +750,7 @@
       $("nextPageBtn").disabled = !hasNext;
 
       if (!rows.length) {
-        $("results").innerHTML = `<div class="empty"><strong>No records found.</strong><br/>Try expanding the lookback window, selecting “No time limit,” changing the microsphere type or country filter, or adjusting the search expression.</div>`;
+        $("results").innerHTML = `<div class="empty"><strong>No records found.</strong><br/>Try expanding the lookback window, selecting “No time limit,” changing the microsphere type, country, or multinational filter, or adjusting the search expression.</div>`;
         return;
       }
 
