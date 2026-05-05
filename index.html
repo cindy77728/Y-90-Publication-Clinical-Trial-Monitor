@@ -97,7 +97,7 @@
     }
     .controls {
       display: grid;
-      grid-template-columns: 5.5fr 1.5fr 1.1fr 1.5fr 1.5fr 1.5fr;
+      grid-template-columns: 5.2fr 1.5fr 1.8fr 1.5fr 1.5fr 1.5fr;
       gap: 14px;
       align-items: start;
     }
@@ -107,6 +107,7 @@
       font-size: 13px;
       font-weight: 700;
       margin-bottom: 8px;
+      white-space: nowrap;
     }
     textarea, select, input {
       width: 100%;
@@ -197,6 +198,56 @@
     .paginationBar button {
       padding: 8px 12px;
       border-radius: 12px;
+    }
+    .filterNotice {
+      display: none;
+      margin: -4px 0 14px;
+      padding: 10px 12px;
+      border-radius: 14px;
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .bottomPager {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      margin: 18px 0 8px;
+      padding: 14px 10px;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 14px;
+      flex-wrap: wrap;
+    }
+    .bottomPager button {
+      border: none;
+      background: transparent;
+      color: #2563eb;
+      font-weight: 500;
+      padding: 6px 8px;
+      border-radius: 10px;
+      box-shadow: none;
+    }
+    .bottomPager button:disabled {
+      color: #9ca3af;
+      cursor: not-allowed;
+      opacity: 1;
+    }
+    .bottomPager .pageLabel {
+      color: var(--text);
+      font-weight: 500;
+    }
+    .bottomPager input {
+      width: 56px;
+      min-width: 56px;
+      padding: 6px 8px;
+      border-radius: 0;
+      border: 1px solid #9ca3af;
+      text-align: center;
+      background: white;
     }
     .results {
       display: grid;
@@ -334,6 +385,7 @@
         <div>
           <label for="maxResults">Results per page</label>
           <input id="maxResults" type="number" min="5" max="100" value="25" />
+          <div class="lastUpdated"></div>
         </div>
         <div>
           <label for="categoryFilter">Category filter</label>
@@ -375,7 +427,7 @@
       </div>
       <div class="card stat">
         <div class="statIcon">🧩</div>
-        <div><div class="statLabel">Filtered results</div><div id="filteredCount" class="statValue">0</div></div>
+        <div><div class="statLabel">Results shown</div><div id="filteredCount" class="statValue">0</div></div>
       </div>
       <div class="card stat">
         <div class="statIcon">📆</div>
@@ -392,10 +444,13 @@
     </section>
 
     <section class="paginationBar">
+      <button id="clearFiltersBtn">Clear Filters</button>
       <button id="prevPageBtn" disabled>Previous</button>
-      <span id="pageInfo">Page 1</span>
+      <span id="pageInfo">Total results: 0</span>
       <button id="nextPageBtn" disabled>Next</button>
     </section>
+
+    <div id="filterNotice" class="filterNotice" style="display:none;"></div>
 
     <main id="results" class="results">
       <div class="empty">
@@ -404,8 +459,18 @@
       </div>
     </main>
 
+    <section class="bottomPager" id="bottomPager">
+      <button id="firstPageBtn" disabled>First</button>
+      <button id="bottomPrevPageBtn" disabled>Prev</button>
+      <span class="pageLabel">Page</span>
+      <input id="pageNumberInput" type="number" min="1" value="1" />
+      <span id="totalPagesText">of 1</span>
+      <button id="bottomNextPageBtn" disabled>Next</button>
+      <button id="lastPageBtn" disabled>Last</button>
+    </section>
+
     <footer>
-      Data sources: PubMed via NCBI E-utilities and ClinicalTrials.gov API v2. The default search excludes standalone SIRT/sirtuin terms to reduce false positives. Results are loaded by page to improve performance on mobile devices. Classification, device tagging, country inference, and summaries are rule-based and should be manually verified before external or promotional use. For PubMed, country is inferred from the author affiliation address tail when available; for ClinicalTrials.gov, country uses trial location data. The Multinational tag is inferred from multiple affiliation/location countries or explicit multicenter/international wording. Manual confirmation is still recommended for multi-center or multi-affiliation publications.
+      Data sources: PubMed via NCBI E-utilities and ClinicalTrials.gov API v2. The default search excludes standalone SIRT/sirtuin terms to reduce false positives. Results are loaded by source page to improve performance on mobile devices; category, microsphere type, and country filters trigger a fresh search; the app scans source pages to fill each page with matching records when possible. Classification, device tagging, country inference, and summaries are rule-based and should be manually verified before external or promotional use. For PubMed, country is inferred from the author affiliation address tail when available; for ClinicalTrials.gov, country uses trial location data. The Multinational tag is inferred from multiple affiliation/location countries or explicit multicenter/international wording. Manual confirmation is still recommended for multi-center or multi-affiliation publications.
     </footer>
   </div>
 
@@ -474,6 +539,10 @@
     let trialHistory = [];
     let trialPage = 0;
     let trialNextToken = null;
+
+    let pubmedScanLimitReached = false;
+    let trialScanLimitReached = false;
+    const MAX_SOURCE_RECORDS_TO_SCAN = 3000;
 
     const $ = id => document.getElementById(id);
 
@@ -677,30 +746,35 @@
       return { rows, nextToken: data?.nextPageToken || null };
     }
 
-    function getFilteredRows() {
+    function rowMatchesFilters(r) {
       const categoryFilter = $("categoryFilter").value;
       const deviceFilter = $("deviceFilter").value;
       const countryFilter = $("countryFilter").value;
-      const rows = activeTab === "papers" ? papers : trials;
 
-      return rows.filter(r => {
-        const categoryMatch = categoryFilter === "All" || r.category.includes(categoryFilter);
-        let deviceMatch = true;
-        if (deviceFilter !== "All") {
-          if (deviceFilter === "Both") {
-            deviceMatch = r.device === "Glass + Resin";
-          } else {
-            deviceMatch = r.device === deviceFilter;
-          }
+      const categoryMatch = categoryFilter === "All" || r.category.includes(categoryFilter);
+      let deviceMatch = true;
+      if (deviceFilter !== "All") {
+        if (deviceFilter === "Both") {
+          deviceMatch = r.device === "Glass + Resin";
+        } else {
+          deviceMatch = r.device === deviceFilter;
         }
-        const countryMatch = countryFilter === "All" || r.country === countryFilter;
-        return categoryMatch && deviceMatch && countryMatch;
-      });
+      }
+      const countryMatch = countryFilter === "All" || r.country === countryFilter;
+      return categoryMatch && deviceMatch && countryMatch;
+    }
+
+    function getFilteredRows() {
+      const pageSize = Number($("maxResults").value);
+      const pageIndex = activeTab === "papers" ? pubmedPage : trialPage;
+      const rows = activeTab === "papers" ? papers : trials;
+      return rows.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize);
     }
 
     function updateCategoryOptions() {
       const selected = $("categoryFilter").value;
       const set = new Set(["All"]);
+      if (selected && selected !== "All") set.add(selected);
       [...papers, ...trials].forEach(x => String(x.category || "Unclassified").split(" / ").forEach(c => set.add(c)));
       $("categoryFilter").innerHTML = Array.from(set).map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");
       if (set.has(selected)) $("categoryFilter").value = selected;
@@ -709,6 +783,7 @@
     function updateCountryOptions() {
       const selected = $("countryFilter").value;
       const set = new Set(["All", "Multinational"]);
+      if (selected && selected !== "All") set.add(selected);
       [...papers, ...trials]
         .map(x => x.country || "Not clear")
         .filter(Boolean)
@@ -727,6 +802,52 @@
         .replaceAll("'", "&#039;");
     }
 
+    async function fetchAllFilteredPubMed(query, daysBack) {
+      let cursor = 0;
+      let total = 0;
+      let collected = [];
+      let scanned = 0;
+      const sourceBatchSize = 100;
+      pubmedScanLimitReached = false;
+
+      while (cursor !== null && scanned < MAX_SOURCE_RECORDS_TO_SCAN) {
+        const result = await fetchPubMed(query, daysBack, sourceBatchSize, cursor);
+        total = result.total;
+        scanned += result.rows.length;
+        collected = collected.concat(result.rows.filter(rowMatchesFilters));
+        cursor = result.nextStart;
+        if (!result.rows.length) break;
+      }
+
+      if (cursor !== null && scanned >= MAX_SOURCE_RECORDS_TO_SCAN) {
+        pubmedScanLimitReached = true;
+      }
+
+      return { rows: collected, total, scanned };
+    }
+
+    async function fetchAllFilteredClinicalTrials(query) {
+      let token = "";
+      let collected = [];
+      let scanned = 0;
+      const sourceBatchSize = 100;
+      trialScanLimitReached = false;
+
+      while (scanned < MAX_SOURCE_RECORDS_TO_SCAN) {
+        const result = await fetchClinicalTrials(query, sourceBatchSize, token);
+        scanned += result.rows.length;
+        collected = collected.concat(result.rows.filter(rowMatchesFilters));
+        token = result.nextToken;
+        if (!token || !result.rows.length) break;
+      }
+
+      if (token && scanned >= MAX_SOURCE_RECORDS_TO_SCAN) {
+        trialScanLimitReached = true;
+      }
+
+      return { rows: collected, scanned };
+    }
+
     function render() {
       updateCategoryOptions();
       updateCountryOptions();
@@ -734,23 +855,41 @@
 
       $("paperCount").textContent = papers.length;
       $("trialCount").textContent = trials.length;
-      $("filteredCount").textContent = rows.length;
+      $("filteredCount").textContent = activeTab === "papers" ? papers.length : trials.length;
       $("lookbackStat").textContent = $("daysBack").value === "all" ? "All" : `${$("daysBack").value}d`;
       $("filterText").textContent = `${$("categoryFilter").value} / ${$("deviceFilter").value} / ${$("countryFilter").value}`;
-      $("exportBtn").disabled = rows.length === 0;
+      $("exportBtn").disabled = (activeTab === "papers" ? papers.length : trials.length) === 0;
 
       const isPapers = activeTab === "papers";
-      const pageNumber = isPapers ? pubmedPage + 1 : trialPage + 1;
-      const hasPrevious = isPapers ? pubmedPage > 0 : trialPage > 0;
-      const hasNext = isPapers ? Boolean(pubmedNextStart) : Boolean(trialNextToken);
-      $("pageInfo").textContent = isPapers
-        ? `Page ${pageNumber}${pubmedTotal ? ` · ${pubmedTotal} PubMed records found` : ""}`
-        : `Page ${pageNumber}`;
+      const pageSize = Number($("maxResults").value);
+      const pageIndex = isPapers ? pubmedPage : trialPage;
+      const totalMatched = isPapers ? papers.length : trials.length;
+      const totalPages = Math.max(1, Math.ceil(totalMatched / pageSize));
+      const displayPage = totalMatched === 0 ? 1 : Math.min(pageIndex + 1, totalPages);
+      const hasPrevious = pageIndex > 0;
+      const hasNext = (pageIndex + 1) * pageSize < totalMatched;
+      const limitReached = isPapers ? pubmedScanLimitReached : trialScanLimitReached;
+
+      $("pageInfo").textContent = `Total results: ${totalMatched}${limitReached ? "+" : ""}`;
       $("prevPageBtn").disabled = !hasPrevious;
       $("nextPageBtn").disabled = !hasNext;
 
+      $("firstPageBtn").disabled = !hasPrevious;
+      $("bottomPrevPageBtn").disabled = !hasPrevious;
+      $("bottomNextPageBtn").disabled = !hasNext;
+      $("lastPageBtn").disabled = !hasNext;
+      $("pageNumberInput").value = displayPage;
+      $("pageNumberInput").max = totalPages;
+      $("pageNumberInput").disabled = totalMatched === 0;
+      $("totalPagesText").textContent = `of ${totalPages}`;
+
+      $("filterNotice").style.display = limitReached ? "block" : "none";
+      $("filterNotice").textContent = limitReached
+        ? `Scan limit reached after ${MAX_SOURCE_RECORDS_TO_SCAN} source records. Total results may be higher. Narrow the lookback window or add filters for an exact count.`
+        : "";
+
       if (!rows.length) {
-        $("results").innerHTML = `<div class="empty"><strong>No records found.</strong><br/>Try expanding the lookback window, selecting “No time limit,” changing the microsphere type, country, or multinational filter, or adjusting the search expression.</div>`;
+        $("results").innerHTML = `<div class="empty"><strong>No records found.</strong><br/>Try expanding the lookback window, selecting “No time limit,” clearing filters, or adjusting the search expression.</div>`;
         return;
       }
 
@@ -813,7 +952,7 @@
     }
 
     function downloadCsv() {
-      const rows = getFilteredRows();
+      const rows = activeTab === "papers" ? papers : trials;
       const csv = buildCsv(rows);
       const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
       const url = URL.createObjectURL(blob);
@@ -827,28 +966,22 @@
     async function runSearch() {
       $("errorBox").style.display = "none";
       $("searchBtn").disabled = true;
-      $("searchBtn").textContent = "Searching...";
+      $("searchBtn").textContent = "Searching all matches...";
       try {
         const query = $("query").value;
         const daysBack = $("daysBack").value;
-        const maxResults = Number($("maxResults").value);
+
+        pubmedPage = 0;
+        trialPage = 0;
 
         const [pubmedResult, trialResult] = await Promise.all([
-          fetchPubMed(query, daysBack, maxResults, 0),
-          fetchClinicalTrials(query, maxResults, "")
+          fetchAllFilteredPubMed(query, daysBack),
+          fetchAllFilteredClinicalTrials(query)
         ]);
 
         papers = pubmedResult.rows;
         trials = trialResult.rows;
-
-        pubmedHistory = [0];
-        pubmedPage = 0;
-        pubmedNextStart = pubmedResult.nextStart;
         pubmedTotal = pubmedResult.total;
-
-        trialHistory = [""];
-        trialPage = 0;
-        trialNextToken = trialResult.nextToken;
 
         $("lastUpdated").textContent = `Last updated: ${new Date().toLocaleString()}`;
         render();
@@ -862,83 +995,83 @@
       }
     }
 
-
-    async function goNextPage() {
-      $("errorBox").style.display = "none";
-      $("nextPageBtn").disabled = true;
-      try {
-        const query = $("query").value;
-        const daysBack = $("daysBack").value;
-        const maxResults = Number($("maxResults").value);
-
-        if (activeTab === "papers" && pubmedNextStart !== null) {
-          const result = await fetchPubMed(query, daysBack, maxResults, pubmedNextStart);
-          papers = result.rows;
-          pubmedHistory.push(pubmedNextStart);
-          pubmedPage += 1;
-          pubmedNextStart = result.nextStart;
-          pubmedTotal = result.total;
-        }
-
-        if (activeTab === "trials" && trialNextToken) {
-          const result = await fetchClinicalTrials(query, maxResults, trialNextToken);
-          trials = result.rows;
-          trialHistory.push(trialNextToken);
-          trialPage += 1;
-          trialNextToken = result.nextToken;
-        }
-
-        render();
-      } catch (error) {
-        console.error(error);
-        $("errorBox").textContent = "Unable to load the next page.";
-        $("errorBox").style.display = "block";
-      }
+    function goNextPage() {
+      const pageSize = Number($("maxResults").value);
+      const totalMatched = activeTab === "papers" ? papers.length : trials.length;
+      if (activeTab === "papers" && (pubmedPage + 1) * pageSize < totalMatched) pubmedPage += 1;
+      if (activeTab === "trials" && (trialPage + 1) * pageSize < totalMatched) trialPage += 1;
+      render();
     }
 
-    async function goPreviousPage() {
-      $("errorBox").style.display = "none";
-      $("prevPageBtn").disabled = true;
-      try {
-        const query = $("query").value;
-        const daysBack = $("daysBack").value;
-        const maxResults = Number($("maxResults").value);
+    function goPreviousPage() {
+      if (activeTab === "papers" && pubmedPage > 0) pubmedPage -= 1;
+      if (activeTab === "trials" && trialPage > 0) trialPage -= 1;
+      render();
+    }
 
-        if (activeTab === "papers" && pubmedPage > 0) {
-          const previousStart = pubmedHistory[pubmedPage - 1];
-          const result = await fetchPubMed(query, daysBack, maxResults, previousStart);
-          papers = result.rows;
-          pubmedPage -= 1;
-          pubmedHistory = pubmedHistory.slice(0, pubmedPage + 1);
-          pubmedNextStart = result.nextStart;
-          pubmedTotal = result.total;
-        }
+    function goFirstPage() {
+      if (activeTab === "papers") pubmedPage = 0;
+      if (activeTab === "trials") trialPage = 0;
+      render();
+    }
 
-        if (activeTab === "trials" && trialPage > 0) {
-          const previousToken = trialHistory[trialPage - 1];
-          const result = await fetchClinicalTrials(query, maxResults, previousToken);
-          trials = result.rows;
-          trialPage -= 1;
-          trialHistory = trialHistory.slice(0, trialPage + 1);
-          trialNextToken = result.nextToken;
-        }
+    function goLastPage() {
+      const pageSize = Number($("maxResults").value);
+      const totalMatched = activeTab === "papers" ? papers.length : trials.length;
+      const lastPageIndex = Math.max(0, Math.ceil(totalMatched / pageSize) - 1);
+      if (activeTab === "papers") pubmedPage = lastPageIndex;
+      if (activeTab === "trials") trialPage = lastPageIndex;
+      render();
+    }
 
-        render();
-      } catch (error) {
-        console.error(error);
-        $("errorBox").textContent = "Unable to load the previous page.";
-        $("errorBox").style.display = "block";
-      }
+    function goToPage(pageNumber) {
+      const pageSize = Number($("maxResults").value);
+      const totalMatched = activeTab === "papers" ? papers.length : trials.length;
+      const totalPages = Math.max(1, Math.ceil(totalMatched / pageSize));
+      const safePage = Math.min(Math.max(1, pageNumber || 1), totalPages);
+      const pageIndex = safePage - 1;
+      if (activeTab === "papers") pubmedPage = pageIndex;
+      if (activeTab === "trials") trialPage = pageIndex;
+      render();
+    }
+
+    async function rerunSearchFromFilters() {
+      $("lastUpdated").textContent = "Filters changed. Refreshing search...";
+      await runSearch();
+    }
+
+    async function clearFilters() {
+      $("categoryFilter").value = "All";
+      $("deviceFilter").value = "All";
+      $("countryFilter").value = "All";
+      await runSearch();
     }
 
     $("searchBtn").addEventListener("click", runSearch);
     $("exportBtn").addEventListener("click", downloadCsv);
+    $("clearFiltersBtn").addEventListener("click", clearFilters);
     $("nextPageBtn").addEventListener("click", goNextPage);
     $("prevPageBtn").addEventListener("click", goPreviousPage);
-    $("categoryFilter").addEventListener("change", render);
-    $("deviceFilter").addEventListener("change", render);
-    $("countryFilter").addEventListener("change", render);
-    $("daysBack").addEventListener("change", render);
+    $("firstPageBtn").addEventListener("click", goFirstPage);
+    $("bottomPrevPageBtn").addEventListener("click", goPreviousPage);
+    $("bottomNextPageBtn").addEventListener("click", goNextPage);
+    $("lastPageBtn").addEventListener("click", goLastPage);
+    $("pageNumberInput").addEventListener("change", (e) => goToPage(Number(e.target.value)));
+    $("pageNumberInput").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") goToPage(Number(e.target.value));
+    });
+    $("categoryFilter").addEventListener("change", rerunSearchFromFilters);
+    $("deviceFilter").addEventListener("change", rerunSearchFromFilters);
+    $("countryFilter").addEventListener("change", rerunSearchFromFilters);
+    $("daysBack").addEventListener("change", () => {
+      $("lastUpdated").textContent = "Lookback changed. Click Search Now to refresh results.";
+      render();
+    });
+    $("maxResults").addEventListener("change", () => {
+      pubmedPage = 0;
+      trialPage = 0;
+      render();
+    });
 
     $("papersTab").addEventListener("click", () => {
       activeTab = "papers";
